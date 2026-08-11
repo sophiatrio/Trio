@@ -2,6 +2,7 @@ import Foundation
 import LoopKit
 import Testing
 @testable import Trio
+import UserNotifications
 
 @MainActor
 @Suite("Trio Alerts: TrioModalAlertScheduler clearNonCriticalBanners") struct TrioModalAlertSchedulerClearTests {
@@ -63,6 +64,25 @@ import Testing
         ])
         scheduler.clearNonCriticalBanners()
         #expect(scheduler.active.isEmpty)
+    }
+}
+
+@Suite("Alert Notification Response Tests") struct AlertNotificationResponseTests {
+    @Test("Routes quick actions to their snooze duration") func snoozeActions() {
+        for action in NotificationResponseAction.allCases {
+            #expect(
+                AlertNotificationResponse(actionIdentifier: action.rawValue) == .snooze(action.duration)
+            )
+        }
+    }
+
+    @Test("Routes dismissal separately from acknowledgement") func systemActions() {
+        #expect(
+            AlertNotificationResponse(actionIdentifier: UNNotificationDismissActionIdentifier) == .dismiss
+        )
+        #expect(
+            AlertNotificationResponse(actionIdentifier: UNNotificationDefaultActionIdentifier) == .acknowledge
+        )
     }
 }
 
