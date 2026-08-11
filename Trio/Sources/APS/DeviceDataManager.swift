@@ -241,7 +241,7 @@ final class BaseDeviceDataManager: DeviceDataManager, Injectable {
         }
     }
 
-    @PersistedProperty(key: "PumpManagerState") var rawPumpManager: PumpManager.RawValue?
+    @DeviceOnlyPersistedProperty(key: "PumpManagerState") var rawPumpManager: PumpManager.RawValue?
 
     @SyncAccess private var lastPumpHeartbeatRequest: PumpHeartbeatRequest?
     @SyncAccess private var cgmProvidesBLEHeartbeat = false
