@@ -3,6 +3,8 @@ import Foundation
 
 /// An App Intent that allows users to cancel an active temporary target through the Shortcuts app.
 struct CancelTempPresetIntent: AppIntent {
+    static var authenticationPolicy: IntentAuthenticationPolicy { .requiresLocalDeviceAuthentication }
+
     /// The title displayed for this action in the Shortcuts app.
     static var title: LocalizedStringResource = "Cancel a Temporary Target"
 
