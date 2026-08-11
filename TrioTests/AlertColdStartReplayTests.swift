@@ -2,6 +2,7 @@ import Foundation
 import LoopKit
 import Swinject
 import Testing
+import UserNotifications
 
 @testable import Trio
 
@@ -143,6 +144,15 @@ import Testing
         let other = entry(alert: "lowReservoir", issuedAgo: 120)
         let result = AlertColdStartReplay.newestPerIdentifier([newer, other, older])
         #expect(result == [newer, other])
+    }
+}
+
+@Suite("Alert Notification Category Tests") struct AlertNotificationCategoryTests {
+    @Test("Quick actions require an unlocked device") func quickActionsRequireAuthentication() {
+        let actions = NotificationCategoryFactory.createGlucoseCategory().actions
+
+        #expect(actions.count == NotificationResponseAction.allCases.count)
+        #expect(actions.allSatisfy { $0.options.contains(.authenticationRequired) })
     }
 }
 

@@ -66,7 +66,7 @@ enum NotificationCategoryFactory {
             UNNotificationAction(
                 identifier: action.rawValue,
                 title: action.localizedTitle,
-                options: []
+                options: [.authenticationRequired]
             )
         }
 
