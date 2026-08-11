@@ -180,6 +180,83 @@ import Testing
         #expect(clampedEntries?.count == 1, "Sub-39 backfilled glucose should be clamped and stored as 39")
     }
 
+    @Test("Future glucose is rejected by both storage paths") func testFutureGlucoseIsRejected() async throws {
+        let futureDate = Date().addingTimeInterval(24 * 60 * 60)
+
+        #expect(!storage.isGlucoseDataFresh(futureDate))
+
+        try await storage.storeGlucose([
+            BloodGlucose(date: 410, dateString: futureDate, glucose: 410)
+        ])
+        try await storage.backfillGlucose([
+            BloodGlucose(date: 411, dateString: futureDate, glucose: 411)
+        ])
+
+        let storedEntries = try await coreDataStack.fetchEntitiesAsync(
+            ofType: GlucoseStored.self,
+            onContext: testContext,
+            predicate: NSPredicate(format: "glucose == 410 OR glucose == 411"),
+            key: "date",
+            ascending: false
+        ) as? [GlucoseStored]
+
+        #expect(storedEntries?.isEmpty == true)
+    }
+
+    @Test("Five-minute clock skew remains admissible") func testAdmissibleFutureSkew() async throws {
+        let admissibleDate = Date().addingTimeInterval(4 * 60)
+
+        #expect(storage.isGlucoseDataFresh(admissibleDate))
+
+        try await storage.storeGlucose([
+            BloodGlucose(date: 412, dateString: admissibleDate, glucose: 412)
+        ])
+
+        let storedEntries = try await coreDataStack.fetchEntitiesAsync(
+            ofType: GlucoseStored.self,
+            onContext: testContext,
+            predicate: NSPredicate(format: "glucose == 412"),
+            key: "date",
+            ascending: false
+        ) as? [GlucoseStored]
+
+        #expect(storedEntries?.count == 1)
+    }
+
+    @Test("Stored future glucose is ignored and deleted") func testStoredFutureGlucoseRecovery() async throws {
+        let currentDate = Date().addingTimeInterval(-60)
+        let futureDate = Date().addingTimeInterval(24 * 60 * 60)
+        try await testContext.perform {
+            let currentGlucose = GlucoseStored(context: testContext)
+            currentGlucose.id = UUID()
+            currentGlucose.date = currentDate
+            currentGlucose.glucose = 100
+
+            let glucose = GlucoseStored(context: testContext)
+            glucose.id = UUID()
+            glucose.date = futureDate
+            glucose.glucose = 413
+            try testContext.save()
+        }
+
+        #expect(storage.lastGlucoseDate() == currentDate)
+
+        let algorithmGlucose = try await storage.getGlucoseForAlgorithm(shouldSmoothGlucose: false, fetchHours: 24)
+        #expect(!algorithmGlucose.contains { $0.sgv == 413 || $0.glucose == 413 })
+
+        #expect(storage.syncDate() == currentDate)
+
+        let storedEntries = try await coreDataStack.fetchEntitiesAsync(
+            ofType: GlucoseStored.self,
+            onContext: testContext,
+            predicate: NSPredicate(format: "glucose == 413"),
+            key: "date",
+            ascending: false
+        ) as? [GlucoseStored]
+
+        #expect(storedEntries?.isEmpty == true)
+    }
+
     @Test(
         "Test glucose alarms",
         .enabled(if: false, "Flaky test, disabled while investigating")
