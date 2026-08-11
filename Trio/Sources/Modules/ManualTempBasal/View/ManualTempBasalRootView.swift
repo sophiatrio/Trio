@@ -26,6 +26,7 @@ extension ManualTempBasal {
                         TextFieldWithToolBar(
                             text: $state.rate,
                             placeholder: "0",
+                            maxValue: state.maximumBasalRate,
                             numberFormatter: formatter,
                             initialFocus: true,
                             unitsText: String(localized: "U/hr", comment: "Units text for temporary basal rate")
@@ -47,6 +48,7 @@ extension ManualTempBasal {
                 Section {
                     Button { state.enact() }
                     label: { Text("Enact") }
+                        .disabled(!state.rateIsValid)
                     Button { state.cancel() }
                     label: { Text("Cancel Temp Basal") }
                 }

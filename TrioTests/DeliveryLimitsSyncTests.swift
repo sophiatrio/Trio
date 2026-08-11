@@ -65,3 +65,22 @@ import Testing
         #expect(limits.maximumBolus?.doubleValue(for: bolusUnit) != defaultMaxBolus)
     }
 }
+
+@Suite("Manual Temp Basal Limit Tests") struct ManualTempBasalLimitTests {
+    @Test("Rate must be within the configured basal limit") func rateValidation() {
+        let state = ManualTempBasal.StateModel()
+        state.maximumBasalRate = 5
+
+        state.rate = 0
+        #expect(state.rateIsValid)
+
+        state.rate = 5
+        #expect(state.rateIsValid)
+
+        state.rate = 5.01
+        #expect(!state.rateIsValid)
+
+        state.rate = -0.01
+        #expect(!state.rateIsValid)
+    }
+}
