@@ -40,6 +40,52 @@ import Testing
         #expect(storage is BaseGlucoseStorage, "Storage should be of type BaseGlucoseStorage")
     }
 
+    @Test("Unusable glucose is rejected by both storage paths") func testUnusableGlucoseIsRejected() async throws {
+        let currentDate = Date()
+        let backfillDate = currentDate.addingTimeInterval(-30 * 60)
+        let missingDate = currentDate.addingTimeInterval(-60 * 60)
+
+        try await storage.storeGlucose([
+            BloodGlucose(date: 601, dateString: currentDate, glucose: 601),
+            BloodGlucose(date: 0, dateString: missingDate)
+        ])
+        try await storage.backfillGlucose([
+            BloodGlucose(date: 602, dateString: backfillDate, glucose: .max)
+        ])
+
+        let storedEntries = try await coreDataStack.fetchEntitiesAsync(
+            ofType: GlucoseStored.self,
+            onContext: testContext,
+            predicate: NSPredicate(
+                format: "date == %@ OR date == %@ OR date == %@",
+                currentDate as NSDate,
+                backfillDate as NSDate,
+                missingDate as NSDate
+            ),
+            key: "date",
+            ascending: false
+        ) as? [GlucoseStored]
+
+        #expect(storedEntries?.isEmpty == true)
+    }
+
+    @Test("Raw glucose is validated before calibration") func testGlucoseValidationPrecedesCalibration() throws {
+        let date = Date()
+        let prepared = BaseFetchGlucoseManager.validatedAndCalibrated(
+            entries: [
+                BloodGlucose(id: "excessive", sgv: 601, date: 601, dateString: date, glucose: 601),
+                BloodGlucose(id: "missing", date: 0, dateString: date),
+                BloodGlucose(id: "admissible", date: 100, dateString: date, glucose: 100)
+            ],
+            // Calibration saturates excessive input at a plausible value, so validation must precede it.
+            using: { min(Double($0), 500) }
+        )
+
+        #expect(prepared.map(\.id) == ["admissible"])
+        #expect(prepared.first?.glucose == 100)
+        #expect(prepared.first?.sgv == nil)
+    }
+
     @Test("Store and retrieve glucose entries") func testStoreAndRetrieveGlucose() async throws {
         // Given
         let testGlucose = [

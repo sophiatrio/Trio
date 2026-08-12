@@ -1,6 +1,9 @@
 import Foundation
 
 struct BloodGlucose: JSON, Identifiable, Hashable, Codable {
+    // DetermineBasal rejects readings above this value.
+    static let maximumAlgorithmGlucose = 600
+
     enum Direction: String, JSON {
         case tripleUp = "TripleUp"
         case doubleUp = "DoubleUp"
@@ -170,6 +173,11 @@ struct BloodGlucose: JSON, Identifiable, Hashable, Codable {
     var sessionStartDate: Date? = nil
     var transmitterID: String? = nil
     var isStateValid: Bool { sgv ?? 0 >= 39 && noise ?? 1 != 4 }
+    // Storage clamps sub-floor readings; missing and above-ceiling values are not usable inputs.
+    var hasAdmissibleGlucose: Bool {
+        guard let glucose else { return false }
+        return glucose <= Self.maximumAlgorithmGlucose
+    }
 
     // TODO: remove this custom Equatable/Hashable. Keying identity on `dateString` is a footgun:
     // two distinct readings at the same instant collide, and the same reading at different date
