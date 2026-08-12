@@ -10,7 +10,7 @@ extension TrioRemoteControl {
 
         if let token = deviceToken, token != previousDeviceToken {
             UserDefaults.standard.set(token, forKey: "deviceToken")
-            debug(.remoteControl, "Device token updated: \(token)")
+            debug(.remoteControl, "Device token updated")
             shouldUploadProfiles = true
         }
 
