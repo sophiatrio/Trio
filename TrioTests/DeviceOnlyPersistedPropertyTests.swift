@@ -14,6 +14,9 @@ import Testing
         var property = fixture.property()
 
         #expect(property.wrappedValue?["source"] as? String == "legacy")
+        #expect(
+            try fixture.legacyURL.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true
+        )
 
         property.wrappedValue = ["source": "secure", "secret": secureSecret]
 
