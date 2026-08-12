@@ -357,3 +357,16 @@ import Testing
          #expect(status!.longAvgDelta == -5)
      }*/
 }
+
+@Suite("BloodGlucose Tests") struct BloodGlucoseTests {
+    @Test("Out-of-range floating-point glucose values do not trap") func testOutOfRangeGlucoseDecode() throws {
+        let data = Data(
+            #"{"sgv":1e100,"mbg":-1e100,"date":0,"dateString":"1970-01-01T00:00:00Z"}"#.utf8
+        )
+
+        let glucose = try JSONCoding.decoder.decode(BloodGlucose.self, from: data)
+
+        #expect(glucose.sgv == nil)
+        #expect(glucose.mbg == nil)
+    }
+}
