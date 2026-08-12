@@ -10,7 +10,9 @@ final class SimpleLogReporter: IssueReporter {
         return dateFormatter
     }
 
-    func setup() {}
+    func setup() {
+        Self.excludeLogsFromBackup()
+    }
 
     func setUserIdentifier(_: String?) {}
 
@@ -28,6 +30,7 @@ final class SimpleLogReporter: IssueReporter {
                 withIntermediateDirectories: false,
                 attributes: nil
             )
+            Self.excludeLogsFromBackup()
         }
 
         if !fileManager.fileExists(atPath: SimpleLogReporter.logFile) {
@@ -68,6 +71,13 @@ final class SimpleLogReporter: IssueReporter {
         let documentsDirectory = paths[0]
         return documentsDirectory
     }
+
+    private static func excludeLogsFromBackup() {
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var url = URL(fileURLWithPath: logDir)
+        try? url.setResourceValues(values)
+    }
 }
 
 extension SimpleLogReporter {
@@ -91,6 +101,7 @@ extension SimpleLogReporter {
         // Create logs directory if needed
         if !fileManager.fileExists(atPath: logDir.path) {
             try? fileManager.createDirectory(at: logDir, withIntermediateDirectories: true)
+            excludeLogsFromBackup()
         }
 
         // Rotate if needed
