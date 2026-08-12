@@ -193,6 +193,7 @@ private enum DeviceOnlyStorageError: Error {
         self.secureStorageURL = secureStorageURL
         self.keychain = keychain
         self.fileManager = fileManager
+        excludeLegacyStateFromBackup()
     }
 
     var wrappedValue: Value? {
@@ -329,6 +330,18 @@ private enum DeviceOnlyStorageError: Error {
         values.isExcludedFromBackup = true
         var url = storageURL
         try url.setResourceValues(values)
+    }
+
+    private func excludeLegacyStateFromBackup() {
+        guard fileManager.fileExists(atPath: legacyStorageURL.path) else { return }
+        do {
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            var url = legacyStorageURL
+            try url.setResourceValues(values)
+        } catch {
+            debug(.storage, "❌ [DeviceOnlyPersistedProperty] Failed to exclude legacy \(key) from backup: \(error)")
+        }
     }
 
     private func readLegacyUnlessCommitted() -> Value? {
