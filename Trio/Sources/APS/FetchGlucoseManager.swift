@@ -65,7 +65,7 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
         }
     }
 
-    @PersistedProperty(key: "CGMManagerState") var rawCGMManager: CGMManager.RawValue?
+    @DeviceOnlyPersistedProperty(key: "CGMManagerState") var rawCGMManager: CGMManager.RawValue?
 
     private lazy var simulatorSource = GlucoseSimulatorSource()
 
