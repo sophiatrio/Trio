@@ -4,6 +4,8 @@ import Intents
 import Swinject
 
 struct BolusIntent: AppIntent {
+    static var authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
     // Title of the action in the Shortcuts app
     static var title = LocalizedStringResource("Enact Bolus")
 
