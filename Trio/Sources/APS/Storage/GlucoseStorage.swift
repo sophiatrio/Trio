@@ -44,6 +44,8 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
     private enum Config {
         static let filterTime: TimeInterval = 3.5 * 60
         static let minimumGlucose: Int = 39
+        // Persisting readings beyond the algorithm's five-minute tolerance can poison durable watermarks.
+        static let maximumFutureSkew: TimeInterval = 5 * 60
     }
 
     private let makeContext: () -> NSManagedObjectContext
@@ -80,7 +82,9 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
     func backfillGlucose(_ glucose: [BloodGlucose]) async throws {
         let context = makeContext()
         context.name = "backfillGlucose"
-        let clamped = clampToMinimum(glucose)
+        let clamped = clampToMinimum(discardFutureGlucose(glucose))
+
+        guard clamped.isNotEmpty else { return }
 
         try await context.perform {
             // remove already deleted glucose values
@@ -116,7 +120,9 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
     func storeGlucose(_ glucose: [BloodGlucose]) async throws {
         let context = makeContext()
         context.name = "storeGlucose"
-        let clamped = clampToMinimum(glucose)
+        let clamped = clampToMinimum(discardFutureGlucose(glucose))
+
+        guard clamped.isNotEmpty else { return }
 
         try await context.perform {
             // Get new glucose values that don't exist yet
@@ -164,6 +170,32 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
                 clamped.sgv = Config.minimumGlucose
             }
             return clamped
+        }
+    }
+
+    private func discardFutureGlucose(_ glucose: [BloodGlucose], now: Date = Date()) -> [BloodGlucose] {
+        let cutoff = now.addingTimeInterval(Config.maximumFutureSkew)
+        return glucose.filter { $0.dateString <= cutoff }
+    }
+
+    private static func admissibleGlucosePredicate(since date: Date, now: Date = Date()) -> NSPredicate {
+        NSCompoundPredicate(andPredicateWithSubpredicates: [
+            NSPredicate(format: "date >= %@", date as NSDate),
+            NSPredicate(
+                format: "date <= %@",
+                now.addingTimeInterval(Config.maximumFutureSkew) as NSDate
+            )
+        ])
+    }
+
+    private func deleteFutureGlucose(after date: Date, context: NSManagedObjectContext) throws {
+        let request = GlucoseStored.fetchRequest()
+        request.predicate = NSPredicate(format: "date > %@", date as NSDate)
+        for glucose in try context.fetch(request) {
+            context.delete(glucose)
+        }
+        if context.hasChanges {
+            try context.save()
         }
     }
 
@@ -359,7 +391,9 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
 
     func isGlucoseDataFresh(_ glucoseDate: Date?) -> Bool {
         guard let glucoseDate = glucoseDate else { return false }
-        return glucoseDate > Date().addingTimeInterval(-6 * 60)
+        let now = Date()
+        return glucoseDate > now.addingTimeInterval(-6 * 60) &&
+            glucoseDate <= now.addingTimeInterval(Config.maximumFutureSkew)
     }
 
     func syncDate() -> Date {
@@ -368,7 +402,9 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
 
         // Optimize fetch request to only get the date
         let fr = NSFetchRequest<NSDictionary>(entityName: "GlucoseStored")
-        fr.predicate = NSPredicate.predicateForOneDayAgo
+        let now = Date()
+        let latestAdmissibleDate = now.addingTimeInterval(Config.maximumFutureSkew)
+        fr.predicate = Self.admissibleGlucosePredicate(since: Date.oneDayAgo, now: now)
         fr.propertiesToFetch = ["date"]
         fr.fetchLimit = 1
         fr.resultType = .dictionaryResultType
@@ -377,6 +413,12 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
         var fetchedDate: Date = .distantPast
 
         context.performAndWait {
+            do {
+                try self.deleteFutureGlucose(after: latestAdmissibleDate, context: context)
+            } catch {
+                debug(.storage, "Failed to delete future glucose: \(error)")
+            }
+
             do {
                 if let result = try context.fetch(fr).first,
                    let date = result["date"] as? Date
@@ -396,7 +438,7 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
         context.name = "lastGlucoseDate"
 
         let fetchRequest = GlucoseStored.fetchRequest()
-        fetchRequest.predicate = NSPredicate.predicateForOneDayAgo
+        fetchRequest.predicate = Self.admissibleGlucosePredicate(since: Date.oneDayAgo)
         fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \GlucoseStored.date, ascending: false)]
         fetchRequest.fetchLimit = 1
 
@@ -434,7 +476,7 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
     }
 
     func fetchLatestGlucose(context: NSManagedObjectContext) throws -> GlucoseStored? {
-        let predicate = NSPredicate.predicateFor20MinAgo
+        let predicate = Self.admissibleGlucosePredicate(since: Date.twentyMinutesAgo)
         return (try CoreDataStack.shared.fetchEntities(
             ofType: GlucoseStored.self,
             onContext: context,
@@ -457,7 +499,7 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
         let results = try await CoreDataStack.shared.fetchEntitiesAsync(
             ofType: GlucoseStored.self,
             onContext: context,
-            predicate: NSPredicate(format: "date >= %@", cutoff as NSDate),
+            predicate: Self.admissibleGlucosePredicate(since: cutoff),
             key: "date",
             ascending: false,
             batchSize: 48
