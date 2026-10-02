@@ -3,6 +3,8 @@ import Foundation
 
 /// An App Intent that allows users to cancel an active override through the Shortcuts app.
 struct CancelOverrideIntent: AppIntent {
+    static var authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
     /// The title displayed for this action in the Shortcuts app.
     static var title = LocalizedStringResource("Cancel override")
 
