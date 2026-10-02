@@ -4,6 +4,8 @@ import Intents
 import Swinject
 
 struct AddCarbPresetIntent: AppIntent {
+    static var authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+
     // Title of the action in the Shortcuts app
     static var title: LocalizedStringResource = "Add carbs"
 
