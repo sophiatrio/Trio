@@ -35,13 +35,13 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 1
 
       - name: Restore cache
         id: spm-cache-restore
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: AlgorithmPackage/.build
           key: ${{ runner.os }}-spm-algorithm-${{ hashFiles('AlgorithmPackage/Package.swift', 'AlgorithmPackage/Package.resolved') }}
@@ -58,7 +58,7 @@ jobs:
         # PRs read the dev cache but never write it — avoids churning the
         # 10 GB per-repo cache limit. dev pushes refresh the shared baseline.
         if: always() && github.event_name == 'push' && steps.spm-cache-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: AlgorithmPackage/.build
           key: ${{ runner.os }}-spm-algorithm-${{ hashFiles('AlgorithmPackage/Package.swift', 'AlgorithmPackage/Package.resolved') }}
@@ -104,7 +104,7 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
 
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 1
           submodules: recursive
@@ -122,7 +122,7 @@ jobs:
       # recompile. Saved per-SHA so the newest is always fresh.
       - name: Restore DerivedData
         id: dd-restore
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ~/Library/Developer/Xcode/DerivedData
           key: ${{ runner.os }}-dd-${{ hashFiles('**/Package.resolved', '.submodule-status') }}-${{ github.sha }}
@@ -134,7 +134,7 @@ jobs:
       # `swift run --package-path BuildTools`. Cache its build dir so that
       # ~1 min recompile only happens when BuildTools' manifest changes.
       - name: Cache BuildTools (SwiftFormat)
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: BuildTools/.build
           key: ${{ runner.os }}-buildtools-${{ hashFiles('BuildTools/Package.swift', 'BuildTools/Package.resolved') }}
@@ -204,7 +204,7 @@ jobs:
 
       - name: Upload build log
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: xcodebuild-build-log
           path: xcodebuild-build.log
@@ -245,7 +245,7 @@ jobs:
         # compilation cache accumulate). PRs restore it warm but never re-upload
         # it, so a PR run pays no save cost and PRs don't evict each other.
         if: always() && github.event_name == 'push' && steps.dd-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ~/Library/Developer/Xcode/DerivedData
           key: ${{ runner.os }}-dd-${{ hashFiles('**/Package.resolved', '.submodule-status') }}-${{ github.sha }}
@@ -303,7 +303,7 @@ jobs:
 
       - name: Upload test log
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: xcodebuild-test-log
           path: xcodebuild.log
