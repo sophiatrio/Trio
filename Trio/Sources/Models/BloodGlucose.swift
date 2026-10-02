@@ -88,7 +88,7 @@ struct BloodGlucose: JSON, Identifiable, Hashable, Codable {
         if sgv == nil {
             // The nightscout API might return a double instead of an int, or the key might be missing
             if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: .sgv) {
-                sgv = Int(doubleValue)
+                sgv = Int(exactly: doubleValue.rounded(.towardZero))
             }
             // If both attempts fail, sgv remains nil
         }
@@ -96,7 +96,7 @@ struct BloodGlucose: JSON, Identifiable, Hashable, Codable {
         if mbg == nil {
             // The nightscout API might return a double instead of an int, or the key might be missing
             if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: .mbg) {
-                mbg = Int(doubleValue)
+                mbg = Int(exactly: doubleValue.rounded(.towardZero))
             }
             // If both attempts fail, sgv remains nil
         }
