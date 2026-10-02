@@ -246,10 +246,13 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
     }
 
     private func storeGlucoseInCoreData(_ glucose: [BloodGlucose], context: NSManagedObjectContext) throws {
-        if glucose.count > 1 {
-            try storeGlucoseBatch(glucose, context: context)
+        let admissible = glucose.filter(\.hasAdmissibleGlucose)
+        guard admissible.isNotEmpty else { return }
+
+        if admissible.count > 1 {
+            try storeGlucoseBatch(admissible, context: context)
         } else {
-            try storeGlucoseRegular(glucose, context: context)
+            try storeGlucoseRegular(admissible, context: context)
         }
     }
 

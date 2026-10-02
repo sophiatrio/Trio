@@ -296,7 +296,10 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
 
     private func glucoseStoreAndHeartDecision(syncDate: Date, glucose: [BloodGlucose]) async throws {
         // calibration add if required only for sensor
-        let newGlucose = overcalibrate(entries: glucose.filter { $0.sgv != nil })
+        let newGlucose = Self.validatedAndCalibrated(
+            entries: glucose.filter { $0.sgv != nil },
+            using: calibrationService?.calibrate
+        )
 
         var filteredByDate: [BloodGlucose] = []
         var filtered: [BloodGlucose] = []
@@ -361,24 +364,18 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
         glucoseSource?.sourceInfo()
     }
 
-    private func overcalibrate(entries: [BloodGlucose]) -> [BloodGlucose] {
-        // overcalibrate
-        var overcalibration: ((Int) -> (Double))?
+    static func validatedAndCalibrated(
+        entries: [BloodGlucose],
+        using calibrate: ((Int) -> Double)?
+    ) -> [BloodGlucose] {
+        entries.compactMap { entry in
+            guard entry.hasAdmissibleGlucose else { return nil }
+            guard let calibrate else { return entry }
 
-        if let cal = calibrationService {
-            overcalibration = cal.calibrate
-        }
-
-        if let overcalibration = overcalibration {
-            return entries.map { entry in
-                var entry = entry
-                guard entry.glucose != nil else { return entry }
-                entry.glucose = Int(overcalibration(entry.glucose!))
-                entry.sgv = Int(overcalibration(entry.sgv!))
-                return entry
-            }
-        } else {
-            return entries
+            var entry = entry
+            entry.glucose = entry.glucose.map { Int(calibrate($0)) }
+            entry.sgv = entry.sgv.map { Int(calibrate($0)) }
+            return entry
         }
     }
 }
