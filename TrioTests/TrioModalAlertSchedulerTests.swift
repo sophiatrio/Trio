@@ -1,6 +1,7 @@
 import Foundation
 import LoopKit
 import Testing
+import UserNotifications
 @testable import Trio
 
 @MainActor
@@ -156,6 +157,26 @@ import Testing
                 isAlertActive: true,
                 isSnoozeActive: false
             ) == .insert
+        )
+    }
+}
+
+// These identifiers once collapsed into acknowledgement and discarded the requested snooze duration.
+@Suite("Alert Notification Response Tests") struct AlertNotificationResponseTests {
+    @Test("Routes quick actions to their snooze duration") func snoozeActions() {
+        for action in NotificationResponseAction.allCases {
+            #expect(
+                AlertNotificationResponse(actionIdentifier: action.rawValue) == .snooze(action.duration)
+            )
+        }
+    }
+
+    @Test("Routes dismissal separately from acknowledgement") func systemActions() {
+        #expect(
+            AlertNotificationResponse(actionIdentifier: UNNotificationDismissActionIdentifier) == .dismiss
+        )
+        #expect(
+            AlertNotificationResponse(actionIdentifier: UNNotificationDefaultActionIdentifier) == .acknowledge
         )
     }
 }

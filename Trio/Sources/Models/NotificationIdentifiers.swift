@@ -42,6 +42,22 @@ enum NotificationResponseAction: String, CaseIterable {
     }
 }
 
+enum AlertNotificationResponse: Equatable {
+    case acknowledge
+    case dismiss
+    case snooze(TimeInterval)
+
+    init(actionIdentifier: String) {
+        if actionIdentifier == UNNotificationDismissActionIdentifier {
+            self = .dismiss
+        } else if let action = NotificationResponseAction(rawValue: actionIdentifier) {
+            self = .snooze(action.duration)
+        } else {
+            self = .acknowledge
+        }
+    }
+}
+
 // MARK: - NotificationCategoryFactory
 
 enum NotificationCategoryFactory {

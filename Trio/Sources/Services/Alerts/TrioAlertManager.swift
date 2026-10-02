@@ -394,15 +394,16 @@ final class BaseTrioAlertManager: TrioAlertManager, Injectable {
         else { return }
         let identifier = Alert.Identifier(managerIdentifier: managerId, alertIdentifier: alertId)
 
-        // Swipe = 15-min snooze (mirrors the in-app banner's swipe-up).
-        // Tap and action buttons keep the full-ack path.
-        if response.actionIdentifier == UNNotificationDismissActionIdentifier {
+        switch AlertNotificationResponse(actionIdentifier: response.actionIdentifier) {
+        case .dismiss:
+            // Swipe = 15-min snooze (mirrors the in-app banner's swipe-up).
             modalScheduler.snooze(identifier: identifier, duration: 15 * 60)
             userNotificationScheduler.unschedule(identifier: identifier)
-            return
+        case let .snooze(duration):
+            requestSnooze(identifier: identifier, duration: duration)
+        case .acknowledge:
+            handleAcknowledgement(identifier: identifier)
         }
-
-        handleAcknowledgement(identifier: identifier)
     }
 
     func acknowledgeAllOutstanding() {
