@@ -56,8 +56,7 @@ actor TelemetrySendGate {
 /// No health data, credentials, or personally-identifying information is sent.
 /// See `buildPayload()` for the exact set of fields and `TelemetryPreviewView`
 /// for the in-app inspector that renders the same payload.
-/// Opted-out installs send only an empty daily `/anonymous` GET carrying the
-/// app version, install identifier, trigger reason, and prior failure category.
+/// Opted-out installs do not initiate telemetry requests.
 final class TelemetryClient: Injectable {
     // Container-scoped singleton; resolving pulls the APS/device graph, so only touch after loadServices()
     static var shared: TelemetryClient { TrioApp.resolver.resolve(TelemetryClient.self)! }
@@ -153,9 +152,7 @@ final class TelemetryClient: Injectable {
         return new
     }
 
-    /// Materializes the per-install identifier regardless of the telemetry
-    /// sharing preference so both identified and anonymous cadence paths have
-    /// a stable installation header when they run.
+    /// Materializes the local per-install identifier; this does not send a request.
     func initializeInstallID() {
         _ = installId()
     }
@@ -201,10 +198,8 @@ final class TelemetryClient: Injectable {
     /// actor gate, preventing overlapping requests and enforcing a one-hour
     /// retry delay after an unsuccessful attempt.
     @discardableResult func sendIfOverdue(reason: SendReason, now: Date = Date()) async -> Bool {
-        let sharingEnabled = PropertyPersistentFlags.shared.telemetrySharingEnabled != false
-        let lastSentAt = sharingEnabled ?
-            PropertyPersistentFlags.shared.telemetryLastSentAt :
-            PropertyPersistentFlags.shared.telemetryAnonymousLastSentAt
+        guard PropertyPersistentFlags.shared.telemetrySharingEnabled != false else { return false }
+        let lastSentAt = PropertyPersistentFlags.shared.telemetryLastSentAt
 
         return await sendGate.runIfEligible(
             now: now,
@@ -214,15 +209,11 @@ final class TelemetryClient: Injectable {
             retryInterval: Self.retryInterval
         ) { [weak self] in
             guard let self else { return false }
-            return sharingEnabled ? await send(reason: reason) : await sendAnonymous(reason: reason)
+            return await send(reason: reason)
         } onAttempt: {
             PropertyPersistentFlags.shared.telemetryLastAttemptAt = now
         } onSuccess: {
-            if sharingEnabled {
-                self.recordSuccessfulSend()
-            } else {
-                self.recordSuccessfulAnonymousSend()
-            }
+            self.recordSuccessfulSend()
         }
     }
 
@@ -371,11 +362,6 @@ final class TelemetryClient: Injectable {
         PropertyPersistentFlags.shared.telemetryLastAttemptAt = nil
     }
 
-    private func recordSuccessfulAnonymousSend() {
-        PropertyPersistentFlags.shared.telemetryAnonymousLastSentAt = Date()
-        PropertyPersistentFlags.shared.telemetryLastAttemptAt = nil
-    }
-
     private func requestContext(reason: SendReason) -> TelemetryRequestContext {
         TelemetryRequestContext(
             reason: reason.rawValue,
@@ -392,37 +378,6 @@ final class TelemetryClient: Injectable {
         Bundle.main.appDevVersion ??
             (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ??
             "unknown"
-    }
-
-    private func sendAnonymous(reason: SendReason) async -> Bool {
-        func failed(_ reason: String) -> Bool {
-            PropertyPersistentFlags.shared.telemetryLastFailureReason = reason
-            return false
-        }
-
-        let context = requestContext(reason: reason)
-        guard let baseURL = Self.baseURL,
-              var request = Self.anonymousRequest(baseURL: baseURL, context: context)
-        else { return failed("anonymous_request_url_failed") }
-
-        request.timeoutInterval = 15
-
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                return failed("anonymous_non_http_response")
-            }
-            guard (200 ..< 300).contains(http.statusCode) else {
-                warning(.telemetry, "anonymous send non-2xx status=\(http.statusCode)")
-                return failed("anonymous_http_\(http.statusCode)")
-            }
-            PropertyPersistentFlags.shared.telemetryLastFailureReason = nil
-            debug(.telemetry, "anonymous send ok status=\(http.statusCode)")
-            return true
-        } catch {
-            warning(.telemetry, "anonymous send request failed", error: error)
-            return failed("anonymous_request_failed")
-        }
     }
 
     /// Build payload, attest it via App Attest, and POST it. Returns success on
@@ -445,6 +400,7 @@ final class TelemetryClient: Injectable {
     /// Successful sends clear that failure-backoff timestamp and advance the
     /// normal 24-hour cadence.
     @discardableResult func send(reason: SendReason) async -> Bool {
+        guard PropertyPersistentFlags.shared.telemetrySharingEnabled != false else { return false }
         func failed(_ reason: String) -> Bool {
             PropertyPersistentFlags.shared.telemetryLastFailureReason = reason
             return false
@@ -522,7 +478,7 @@ final class TelemetryClient: Injectable {
         request.timeoutInterval = 15
 
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await Self.telemetryData(for: request)
             guard let http = response as? HTTPURLResponse else {
                 debug(.telemetry, "send: non-HTTP response")
                 return failed("non_http_response")
@@ -565,18 +521,20 @@ final class TelemetryClient: Injectable {
         )
     }
 
-    static func anonymousRequest(baseURL: URL, context: TelemetryRequestContext) -> URLRequest? {
-        guard let url = TelemetryAttestor.requestURL(
-            baseURL: baseURL,
-            path: "anonymous",
-            reason: context.reason,
-            lastFailureReason: context.lastFailureReason
-        ) else { return nil }
+    /// Recheck consent at each network boundary: registration and assertion
+    /// suspend, so an opt-out during either must also prevent the next request.
+    static func telemetryData(
+        for request: URLRequest,
+        session: URLSession = .shared
+    ) async throws -> (Data, URLResponse) {
+        try requireTelemetryConsent()
+        return try await session.data(for: request)
+    }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        context.applyHeaders(to: &request)
-        return request
+    static func requireTelemetryConsent() throws {
+        guard PropertyPersistentFlags.shared.telemetrySharingEnabled != false else {
+            throw CancellationError()
+        }
     }
 
     /// `iPhone15,2`-style identifier from `utsname.machine`. Returns

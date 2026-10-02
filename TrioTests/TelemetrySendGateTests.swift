@@ -255,31 +255,29 @@ import Testing
         #expect(request.value(forHTTPHeaderField: "X-Trio-InstallId") == "install-123")
     }
 
-    @Test("Anonymous request is an empty contextual GET") func anonymousRequest() throws {
-        let context = TelemetryRequestContext(
-            reason: "foreground",
-            lastFailureReason: "registration_failed",
-            trioVersion: "0.8.1",
-            installID: "install-123"
-        )
-        let request = try #require(
-            TelemetryClient.anonymousRequest(
-                baseURL: URL(string: "https://telemetry.example")!,
-                context: context
-            )
-        )
-        let components = try #require(URLComponents(url: request.url!, resolvingAgainstBaseURL: false))
+    @Test("Opt-out stops the next request in a telemetry exchange") func optOutDuringExchange() async throws {
+        let flags = PropertyPersistentFlags.shared
+        let original = flags.telemetrySharingEnabled
+        defer { flags.telemetrySharingEnabled = original }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [TelemetryTestProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let request = URLRequest(url: URL(string: "https://telemetry.invalid/checkin")!)
 
-        #expect(request.httpMethod == "GET")
-        #expect(request.httpBody == nil)
-        #expect(request.value(forHTTPHeaderField: "Content-Type") == nil)
-        #expect(request.value(forHTTPHeaderField: "X-Trio-Version") == "0.8.1")
-        #expect(request.value(forHTTPHeaderField: "X-Trio-InstallId") == "install-123")
-        #expect(components.path == "/anonymous")
-        #expect(components.queryItems?.contains(URLQueryItem(name: "reason", value: "foreground")) == true)
-        #expect(
-            components.queryItems?.contains(URLQueryItem(name: "lastFailureReason", value: "registration_failed")) == true
-        )
+        flags.telemetrySharingEnabled = true
+        _ = try await TelemetryClient.telemetryData(for: request, session: session)
+        // Consent can change while registration awaits a response. The same
+        // session must not receive the subsequent challenge/check-in request.
+        flags.telemetrySharingEnabled = false
+        await #expect(throws: CancellationError.self) {
+            _ = try await TelemetryClient.telemetryData(for: request, session: session)
+        }
+        let client = TelemetryClient.shared
+        let lastAttempt = flags.telemetryLastAttemptAt
+        #expect(await client.sendIfOverdue(reason: .foreground) == false)
+        await client.maybeSend(reason: .manual)
+        #expect(flags.telemetryLastAttemptAt == lastAttempt)
     }
 }
 
@@ -302,4 +300,16 @@ private final class SuccessState: @unchecked Sendable {
     func record() {
         lock.withLock { storedTimestamp = Date() }
     }
+}
+
+private final class TelemetryTestProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(
+            url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+        )!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }

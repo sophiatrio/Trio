@@ -101,6 +101,7 @@ final class TelemetryAttestor: Injectable {
 
         let attestationCBOR: Data
         do {
+            try TelemetryClient.requireTelemetryConsent()
             attestationCBOR = try await service.attestKey(keyID, clientDataHash: clientDataHash)
         } catch {
             // `attestKey` is one-shot per key per device, but only on success.
@@ -158,7 +159,7 @@ final class TelemetryAttestor: Injectable {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         request.timeoutInterval = 15
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await TelemetryClient.telemetryData(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw AttestError.transportError
         }
@@ -235,6 +236,7 @@ final class TelemetryAttestor: Injectable {
 
         let assertionCBOR: Data
         do {
+            try TelemetryClient.requireTelemetryConsent()
             assertionCBOR = try await service.generateAssertion(keyID, clientDataHash: clientDataHash)
         } catch {
             throw AttestError.assertionFailed(error)
@@ -255,6 +257,7 @@ final class TelemetryAttestor: Injectable {
         }
         let newKey: String
         do {
+            try TelemetryClient.requireTelemetryConsent()
             newKey = try await service.generateKey()
         } catch {
             throw AttestError.keyGenerationFailed(error)
@@ -277,7 +280,7 @@ final class TelemetryAttestor: Injectable {
         context.applyHeaders(to: &request)
         request.timeoutInterval = 15
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await TelemetryClient.telemetryData(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw AttestError.transportError
         }
